@@ -613,15 +613,79 @@ app.post('/api/sync/trigger', async (req, res) => {
   }
 });
 
-// Mock Cloud Receiver
-app.post('/api/mock-cloud-sync', (req, res) => {
-  console.log('[MOCK CLOUD RECEIVER] Received payload from POS terminal:', req.body);
-  res.json({
-    success: true,
-    status: 'ACK',
-    receivedOrdersCount: req.body.orders ? req.body.orders.length : 0,
-    timestamp: new Date().toISOString()
-  });
+// Cloud Sync Receiver (Stores incoming sync orders from offline desktop POS into cloud database)
+app.post(['/api/sync/receive', '/api/mock-cloud-sync'], async (req, res) => {
+  try {
+    const { orders } = req.body;
+    let savedCount = 0;
+
+    if (orders && Array.isArray(orders)) {
+      for (const ord of orders) {
+        // Check if receipt already exists in database
+        const existing = await db.get('SELECT id FROM orders WHERE receipt_no = ?', [ord.receipt_no]);
+        if (!existing) {
+          const info = await db.run(`
+            INSERT INTO orders (
+              receipt_no, order_type, table_id, table_name, customer_name, customer_phone,
+              subtotal, tax_percent, tax_amount, discount_amount, discount_type, total_amount,
+              payment_method, tendered_amount, change_amount, status, notes, synced, synced_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
+          `, [
+            ord.receipt_no,
+            ord.order_type || 'Take Away',
+            ord.table_id || null,
+            ord.table_name || null,
+            ord.customer_name || null,
+            ord.customer_phone || null,
+            ord.subtotal,
+            ord.tax_percent || 0,
+            ord.tax_amount || 0,
+            ord.discount_amount || 0,
+            ord.discount_type || 'fixed',
+            ord.total_amount,
+            ord.payment_method || 'Cash',
+            ord.tendered_amount || ord.total_amount,
+            ord.change_amount || 0,
+            ord.status || 'Completed',
+            ord.notes || null,
+            ord.created_at || new Date().toISOString()
+          ]);
+
+          const orderId = info.lastID;
+
+          if (ord.items && Array.isArray(ord.items)) {
+            for (const item of ord.items) {
+              await db.run(`
+                INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `, [
+                orderId,
+                item.product_id || null,
+                item.product_name || item.name,
+                item.price,
+                item.quantity,
+                item.subtotal || (item.price * item.quantity),
+                item.notes || null
+              ]);
+            }
+          }
+          savedCount++;
+        }
+      }
+    }
+
+    console.log(`[CLOUD RECEIVER] Processed ${orders?.length || 0} orders, saved ${savedCount} new orders to cloud DB.`);
+
+    res.json({
+      success: true,
+      status: 'ACK',
+      receivedCount: orders ? orders.length : 0,
+      savedCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Fallback JSON 404 for API routes

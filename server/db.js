@@ -180,13 +180,17 @@ export async function initDatabase() {
       ['tax_percent', '5.0'],
       ['currency_symbol', '$'],
       ['receipt_footer', 'Thank you for dining with us! Please come again.'],
-      ['cloud_sync_enabled', 'false'],
-      ['cloud_api_url', 'http://localhost:5000/api/mock-cloud-sync'],
-      ['cloud_api_key', 'demo_api_key_123']
+      ['cloud_sync_enabled', 'true'],
+      ['cloud_api_url', 'https://restaurant-pos-five-green.vercel.app/api/sync/receive'],
+      ['cloud_api_key', 'pos_sync_secure_key']
     ];
     for (const [key, value] of defaultSettings) {
       await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, value]);
     }
+  } else {
+    // Update cloud sync URL to live Vercel link
+    await db.run("UPDATE settings SET value = 'https://restaurant-pos-five-green.vercel.app/api/sync/receive' WHERE key = 'cloud_api_url' AND (value LIKE '%localhost%' OR value = '')");
+    await db.run("UPDATE settings SET value = 'true' WHERE key = 'cloud_sync_enabled' AND value = 'false'");
   }
 
   // Seed default categories & products if empty
