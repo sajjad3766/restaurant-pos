@@ -695,11 +695,45 @@ app.post(['/api/sync/receive', '/api/mock-cloud-sync'], async (req, res) => {
             }
           }
           savedCount++;
+        } else {
+          // Update existing order status, total, payment details, etc.
+          await db.run(`
+            UPDATE orders SET
+              status = ?,
+              total_amount = ?,
+              subtotal = ?,
+              tax_amount = ?,
+              discount_amount = ?,
+              payment_method = ?,
+              tendered_amount = ?,
+              change_amount = ?,
+              notes = ?,
+              synced = 1,
+              synced_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [
+            ord.status || 'Completed',
+            ord.total_amount,
+            ord.subtotal,
+            ord.tax_amount || 0,
+            ord.discount_amount || 0,
+            ord.payment_method || 'Cash',
+            ord.tendered_amount || ord.total_amount,
+            ord.change_amount || 0,
+            ord.notes || null,
+            existing.id
+          ]);
+
+          // If order is reversed or cancelled, free the table in cloud DB
+          if (['Cancelled', 'Reversed', 'Refunded'].includes(ord.status) && ord.table_id) {
+            await db.run("UPDATE tables SET status = 'available', current_order_id = NULL WHERE id = ?", [ord.table_id]);
+          }
+          savedCount++;
         }
       }
     }
 
-    console.log(`[CLOUD RECEIVER] Processed ${orders?.length || 0} orders, saved ${savedCount} new orders to cloud DB.`);
+    console.log(`[CLOUD RECEIVER] Processed ${orders?.length || 0} orders, updated/saved ${savedCount} records in cloud DB.`);
 
     res.json({
       success: true,

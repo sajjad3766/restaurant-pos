@@ -52,9 +52,9 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
 
   // Fetch all admin data
-  const loadAdminData = async () => {
+  const loadAdminData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [repRes, prodRes, catRes, tableRes, syncRes] = await Promise.all([
         fetch('/api/reports/dashboard'),
         fetch('/api/products'),
@@ -63,20 +63,25 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
         fetch('/api/sync/status')
       ]);
 
-      setReports(await repRes.json());
-      setProducts(await prodRes.json());
-      setCategories(await catRes.json());
-      setTables(await tableRes.json());
-      setSyncStatus(await syncRes.json());
+      if (repRes.ok) setReports(await repRes.json());
+      if (prodRes.ok) setProducts(await prodRes.json());
+      if (catRes.ok) setCategories(await catRes.json());
+      if (tableRes.ok) setTables(await tableRes.json());
+      if (syncRes.ok) setSyncStatus(await syncRes.json());
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadAdminData();
+    // Live Auto-Refresh every 3 seconds for instant real-time sync
+    const liveInterval = setInterval(() => {
+      loadAdminData(true);
+    }, 3000);
+    return () => clearInterval(liveInterval);
   }, []);
 
   // Admin Order Actions: Cancel, Reverse, Refund, Complete
@@ -309,44 +314,61 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
   };
 
   return (
-    <div style={{ background: '#0f172a', minHeight: 'calc(100vh - 60px)', padding: '24px', color: '#f8fafc' }}>
+    <div style={{ background: '#0f172a', minHeight: '100%', padding: '24px', paddingBottom: '80px', color: '#f8fafc', overflowY: 'auto', flex: 1 }}>
       
       {/* Sub Navigation Bar */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', borderBottom: '1px solid #334155', paddingBottom: '14px', flexWrap: 'wrap' }}>
-        {[
-          { id: 'overview', label: 'Sales & Orders Control', icon: BarChart3 },
-          { id: 'live_tables', label: 'Live Tables & Orders', icon: Users },
-          { id: 'products', label: 'Menu Catalog', icon: Package },
-          { id: 'sync', label: 'Cloud Sync Engine', icon: Cloud },
-          { id: 'settings', label: 'POS Settings', icon: SettingsIcon },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '10px 18px',
-                borderRadius: '8px',
-                background: isActive ? '#2563eb' : '#1e293b',
-                color: '#fff',
-                border: '1px solid ' + (isActive ? '#2563eb' : '#334155'),
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '14px'
-              }}
-            >
-              <Icon size={18} /> {tab.label}
-            </button>
-          );
-        })}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #334155', paddingBottom: '14px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'overview', label: 'Sales & Orders Control', icon: BarChart3 },
+            { id: 'live_tables', label: 'Live Tables & Orders', icon: Users },
+            { id: 'products', label: 'Menu Catalog', icon: Package },
+            { id: 'sync', label: 'Cloud Sync Engine', icon: Cloud },
+            { id: 'settings', label: 'POS Settings', icon: SettingsIcon },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  background: isActive ? '#2563eb' : '#1e293b',
+                  color: '#fff',
+                  border: '1px solid ' + (isActive ? '#2563eb' : '#334155'),
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '14px',
+                  fontWeight: isActive ? '700' : '500'
+                }}
+              >
+                <Icon size={18} /> {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Live Auto-Refresh Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', color: '#10b981', fontWeight: '600' }}>
+            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></span>
+            Live Updates Active (3s)
+          </div>
+          <button
+            onClick={() => loadAdminData()}
+            style={{ background: '#1e293b', border: '1px solid #334155', color: '#94a3b8', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <RotateCcw size={12} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* TAB 1: OVERVIEW & SALES CONTROL */}
       {activeTab === 'overview' && reports && (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
               <div style={{ color: '#94a3b8', fontSize: '13px' }}>Today's Total Revenue</div>

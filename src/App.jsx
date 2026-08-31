@@ -141,7 +141,7 @@ export default function App() {
       </header>
 
       {/* BODY VIEW MOUNT */}
-      <main style={{ flex: 1, overflow: 'hidden' }}>
+      <main style={{ flex: 1, overflowY: activeView === 'admin' ? 'auto' : 'hidden', overflowX: 'hidden', height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' }}>
         {activeView === 'pos' ? (
           <PosTerminal settings={settings} onOrderSuccess={fetchAppConfig} />
         ) : (
