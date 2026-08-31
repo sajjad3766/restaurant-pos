@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Production build output
+dist/
+dist-electron/
+
+# Environment variables & Local logs
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Uploads directory contents (keep folder)
+server/uploads/*
+!server/uploads/.gitkeep
