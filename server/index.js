@@ -88,6 +88,117 @@ app.post('/api/upload', async (req, res) => {
 });
 
 // ----------------------------------------------------
+// 0. AUTHENTICATION & USERS ENDPOINTS
+// ----------------------------------------------------
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const user = await db.get('SELECT id, username, password, name, role FROM users WHERE LOWER(username) = LOWER(?)', [username.trim()]);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    if (user.password !== password.trim()) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Return sanitized user session
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await db.query('SELECT id, username, name, role, created_at FROM users ORDER BY id ASC');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, password, name, role } = req.body;
+    if (!username || !password || !name) {
+      return res.status(400).json({ error: 'Username, password, and name are required' });
+    }
+
+    const existing = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [username.trim()]);
+    if (existing) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    const result = await db.run(
+      'INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
+      [username.trim(), password.trim(), name.trim(), role || 'operator']
+    );
+
+    res.json({
+      success: true,
+      user: {
+        id: result.lastID,
+        username: username.trim(),
+        name: name.trim(),
+        role: role || 'operator'
+      },
+      message: 'User created successfully'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, role, password } = req.body;
+
+    if (password && password.trim()) {
+      await db.run('UPDATE users SET name = ?, role = ?, password = ? WHERE id = ?', [name.trim(), role, password.trim(), id]);
+    } else {
+      await db.run('UPDATE users SET name = ?, role = ? WHERE id = ?', [name.trim(), role, id]);
+    }
+
+    res.json({ success: true, message: 'User updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Prevent deleting the primary admin account if it's the last admin
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [id]);
+    if (user && user.role === 'admin') {
+      const adminCount = await db.get("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
+      if (adminCount && adminCount.count <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the only remaining admin account' });
+      }
+    }
+
+    await db.run('DELETE FROM users WHERE id = ?', [id]);
+    res.json({ success: true, message: 'User account deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
 // 1. CATEGORIES ENDPOINTS
 // ----------------------------------------------------
 app.get('/api/categories', async (req, res) => {

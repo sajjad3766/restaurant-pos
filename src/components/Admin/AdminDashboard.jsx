@@ -50,17 +50,21 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
 
   const [settingsForm, setSettingsForm] = useState({ ...settings });
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
+  const [usersList, setUsersList] = useState([]);
+  const [newUserForm, setNewUserForm] = useState({ username: '', password: '', name: '', role: 'operator' });
+  const [creatingUser, setCreatingUser] = useState(false);
 
   // Fetch all admin data
   const loadAdminData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [repRes, prodRes, catRes, tableRes, syncRes] = await Promise.all([
+      const [repRes, prodRes, catRes, tableRes, syncRes, usersRes] = await Promise.all([
         fetch('/api/reports/dashboard'),
         fetch('/api/products'),
         fetch('/api/categories'),
         fetch('/api/tables'),
-        fetch('/api/sync/status')
+        fetch('/api/sync/status'),
+        fetch('/api/users')
       ]);
 
       if (repRes.ok) setReports(await repRes.json());
@@ -68,10 +72,65 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
       if (catRes.ok) setCategories(await catRes.json());
       if (tableRes.ok) setTables(await tableRes.json());
       if (syncRes.ok) setSyncStatus(await syncRes.json());
+      if (usersRes.ok) setUsersList(await usersRes.json());
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
       if (!silent) setLoading(false);
+    }
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!newUserForm.username.trim() || !newUserForm.password.trim() || !newUserForm.name.trim()) {
+      return alert('Please fill in username, password, and full name.');
+    }
+    try {
+      setCreatingUser(true);
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserForm)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create user');
+      alert(`User account "${newUserForm.username}" created successfully!`);
+      setNewUserForm({ username: '', password: '', name: '', role: 'operator' });
+      loadAdminData(true);
+    } catch (err) {
+      alert('Error creating user: ' + err.message);
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!confirm(`Are you sure you want to delete user "${user.username}" (${user.name})?`)) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+      alert(data.message);
+      loadAdminData(true);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const handleChangePassword = async (user) => {
+    const newPass = prompt(`Enter new password for user "${user.username}":`);
+    if (!newPass || !newPass.trim()) return;
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: user.name, role: user.role, password: newPass.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+      alert(`Password for "${user.username}" updated successfully!`);
+    } catch (err) {
+      alert('Error: ' + err.message);
     }
   };
 
@@ -909,6 +968,140 @@ export default function AdminDashboard({ settings, onSettingsUpdated }) {
             >
               <Save size={18} /> Save Settings
             </button>
+          </div>
+
+          {/* STAFF & CASHIERS LOGIN MANAGEMENT */}
+          <div style={{ background: '#1e293b', padding: '24px', borderRadius: '12px', border: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Users size={20} color="#3b82f6" /> Staff Logins & Role Permissions
+              </h3>
+              <p style={{ fontSize: '12px', color: '#94a3b8' }}>
+                Manage login accounts for Operators (POS Only) and Administrators (Full Access).
+              </p>
+            </div>
+
+            {/* Create New User Form */}
+            <form onSubmit={handleCreateUser} style={{ background: '#0f172a', padding: '16px', borderRadius: '8px', border: '1px solid #334155', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr)) 120px auto', gap: '10px', alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: '600' }}>Full Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Cashier"
+                  value={newUserForm.name}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: '600' }}>Username</label>
+                <input
+                  type="text"
+                  placeholder="e.g. cashier2"
+                  value={newUserForm.username}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: '600' }}>Password</label>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={newUserForm.password}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px', fontWeight: '600' }}>Role</label>
+                <select
+                  value={newUserForm.role}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', fontSize: '13px' }}
+                >
+                  <option value="operator">Operator (POS Only)</option>
+                  <option value="admin">Admin (Full Access)</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={creatingUser}
+                style={{
+                  padding: '9px 16px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                + Add Staff
+              </button>
+            </form>
+
+            {/* Existing Users Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', textAlign: 'left' }}>
+                    <th style={{ padding: '10px' }}>Name</th>
+                    <th style={{ padding: '10px' }}>Username</th>
+                    <th style={{ padding: '10px' }}>Role / Permission</th>
+                    <th style={{ padding: '10px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersList.map(u => {
+                    const isAdm = u.role === 'admin';
+                    return (
+                      <tr key={u.id} style={{ borderBottom: '1px solid #334155' }}>
+                        <td style={{ padding: '10px', fontWeight: '600', color: '#f8fafc' }}>{u.name}</td>
+                        <td style={{ padding: '10px', color: '#93c5fd' }}>@{u.username}</td>
+                        <td style={{ padding: '10px' }}>
+                          <span style={{
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            background: isAdm ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                            color: isAdm ? '#60a5fa' : '#34d399'
+                          }}>
+                            {isAdm ? '🛡️ Admin (POS + Admin)' : '👨‍🍳 Operator (POS Orders Only)'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleChangePassword(u)}
+                              style={{ background: '#334155', color: '#93c5fd', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', border: 'none', cursor: 'pointer' }}
+                            >
+                              Reset Password
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer' }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
           </div>
         </div>
       )}

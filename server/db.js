@@ -182,6 +182,42 @@ export async function initDatabase() {
     );
   `);
 
+  // 8. Users & Authentication
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'operator',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed default admin and operator if users table is empty
+  const existingUsers = await db.get('SELECT COUNT(*) as count FROM users');
+  if (!existingUsers || existingUsers.count === 0) {
+    await db.run('INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)', [
+      'admin',
+      'admin123',
+      'System Admin',
+      'admin'
+    ]);
+    await db.run('INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)', [
+      'operator',
+      '1234',
+      'POS Operator',
+      'operator'
+    ]);
+    await db.run('INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)', [
+      'cashier',
+      '1234',
+      'Main Cashier',
+      'operator'
+    ]);
+    console.log('[SQLite DB] Seeded default Admin and Operator accounts.');
+  }
+
   // Seed default settings if empty
   const existingSettings = await db.get('SELECT COUNT(*) as count FROM settings');
   if (existingSettings && existingSettings.count === 0) {

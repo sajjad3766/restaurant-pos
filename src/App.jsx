@@ -1,13 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, BarChart3, Cloud, CloudOff, HardDrive, Clock, CheckCircle } from 'lucide-react';
+import { ShoppingCart, BarChart3, Cloud, CloudOff, HardDrive, Clock, ShieldCheck, UserCheck, LogOut } from 'lucide-react';
 import PosTerminal from './components/POS/PosTerminal';
 import AdminDashboard from './components/Admin/AdminDashboard';
+import LoginModal from './components/Auth/LoginModal';
 
 export default function App() {
   const [activeView, setActiveView] = useState('pos'); // pos, admin
   const [settings, setSettings] = useState({});
   const [syncStatus, setSyncStatus] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pos_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   // Load Settings and Sync status
   const fetchAppConfig = async () => {
@@ -39,6 +50,36 @@ export default function App() {
     };
   }, []);
 
+  // Ensure operator cannot view admin dashboard
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'operator' && activeView === 'admin') {
+      setActiveView('pos');
+    }
+  }, [currentUser, activeView]);
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to log out?')) {
+      localStorage.removeItem('pos_auth_user');
+      setCurrentUser(null);
+      setActiveView('pos');
+    }
+  };
+
+  // If user is not logged in, render the Login Screen
+  if (!currentUser) {
+    return (
+      <LoginModal
+        restaurantName={settings.restaurant_name}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          setActiveView(user.role === 'admin' ? 'admin' : 'pos');
+        }}
+      />
+    );
+  }
+
+  const isAdmin = currentUser.role === 'admin';
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
       
@@ -55,7 +96,7 @@ export default function App() {
       }}>
 
         {/* Brand & View Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ background: '#2563eb', padding: '8px', borderRadius: '8px', color: '#fff', display: 'flex' }}>
               <ShoppingCart size={20} />
@@ -70,49 +111,68 @@ export default function App() {
             </div>
           </div>
 
-          {/* View Buttons */}
-          <div style={{ display: 'flex', gap: '8px', background: '#0f172a', padding: '4px', borderRadius: '8px' }}>
+          {/* Role-Based View Switcher */}
+          <div style={{ display: 'flex', gap: '6px', background: '#0f172a', padding: '4px', borderRadius: '8px' }}>
             <button
               onClick={() => setActiveView('pos')}
               style={{
-                padding: '6px 16px',
+                padding: '6px 14px',
                 borderRadius: '6px',
                 background: activeView === 'pos' ? '#2563eb' : 'transparent',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                fontSize: '13px'
+                fontSize: '13px',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer'
               }}
             >
               <ShoppingCart size={15} /> POS Terminal
             </button>
 
-            <button
-              onClick={() => setActiveView('admin')}
-              style={{
-                padding: '6px 16px',
-                borderRadius: '6px',
-                background: activeView === 'admin' ? '#2563eb' : 'transparent',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px'
-              }}
-            >
-              <BarChart3 size={15} /> Admin Dashboard
-            </button>
+            {/* Admin Dashboard is ONLY shown for Admin role */}
+            {isAdmin && (
+              <button
+                onClick={() => setActiveView('admin')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  background: activeView === 'admin' ? '#2563eb' : 'transparent',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <BarChart3 size={15} /> Admin Dashboard
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Right System Indicators */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Right System & User Indicators */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
 
-          {/* Local SQLite DB Badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(16, 185, 129, 0.1)', padding: '6px 12px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-            <HardDrive size={14} color="#10b981" />
-            <span style={{ fontSize: '12px', color: '#10b981', fontWeight: '600' }}>Local DB: OK</span>
+          {/* Logged in User Badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: isAdmin ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid ' + (isAdmin ? 'rgba(59, 130, 246, 0.4)' : 'rgba(16, 185, 129, 0.4)'),
+            padding: '5px 12px',
+            borderRadius: '20px'
+          }}>
+            {isAdmin ? <ShieldCheck size={15} color="#3b82f6" /> : <UserCheck size={15} color="#10b981" />}
+            <span style={{ fontSize: '12px', color: isAdmin ? '#93c5fd' : '#6ee7b7', fontWeight: '700' }}>
+              {currentUser.name} ({isAdmin ? 'Admin' : 'Operator'})
+            </span>
           </div>
 
           {/* Cloud Connection Badge */}
@@ -121,20 +181,41 @@ export default function App() {
             alignItems: 'center',
             gap: '6px',
             background: syncStatus?.isOnline ? 'rgba(37, 99, 235, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-            padding: '6px 12px',
+            padding: '5px 10px',
             borderRadius: '20px',
             border: '1px solid ' + (syncStatus?.isOnline ? 'rgba(37, 99, 235, 0.3)' : 'rgba(245, 158, 11, 0.3)')
           }}>
             {syncStatus?.isOnline ? <Cloud size={14} color="#2563eb" /> : <CloudOff size={14} color="#f59e0b" />}
-            <span style={{ fontSize: '12px', color: syncStatus?.isOnline ? '#2563eb' : '#f59e0b', fontWeight: '600' }}>
-              {syncStatus?.isOnline ? 'Cloud Online' : 'Cloud Offline'} {syncStatus?.unsyncedCount > 0 && `(${syncStatus.unsyncedCount} pending)`}
+            <span style={{ fontSize: '11px', color: syncStatus?.isOnline ? '#2563eb' : '#f59e0b', fontWeight: '600' }}>
+              {syncStatus?.isOnline ? 'Cloud Online' : 'Cloud Offline'}
             </span>
           </div>
 
           {/* Clock */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '13px', fontWeight: '600' }}>
-            <Clock size={15} /> {currentTime}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', fontWeight: '600' }}>
+            <Clock size={14} /> {currentTime}
           </div>
+
+          {/* Logout Button */}
+          <button
+            onClick={handleLogout}
+            title="Log Out"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              color: '#f87171',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            <LogOut size={14} /> Logout
+          </button>
 
         </div>
 
@@ -143,9 +224,9 @@ export default function App() {
       {/* BODY VIEW MOUNT */}
       <main style={{ flex: 1, overflowY: activeView === 'admin' ? 'auto' : 'hidden', overflowX: 'hidden', height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' }}>
         {activeView === 'pos' ? (
-          <PosTerminal settings={settings} onOrderSuccess={fetchAppConfig} />
+          <PosTerminal settings={settings} currentUser={currentUser} onOrderSuccess={fetchAppConfig} />
         ) : (
-          <AdminDashboard settings={settings} onSettingsUpdated={fetchAppConfig} />
+          <AdminDashboard settings={settings} currentUser={currentUser} onSettingsUpdated={fetchAppConfig} />
         )}
       </main>
 
