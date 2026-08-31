@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.restaurant.pos",
     "productName": "Restaurant POS",
+    "npmRebuild": false,
     "directories": {
       "output": "dist-electron"
     },

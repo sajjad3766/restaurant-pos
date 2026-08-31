@@ -1,11 +1,23 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, 'pos_database.db');
+let dbPath = path.join(__dirname, 'pos_database.db');
+if (process.env.VERCEL) {
+  dbPath = path.join('/tmp', 'pos_database.db');
+  const sourceDb = path.join(__dirname, 'pos_database.db');
+  if (!fs.existsSync(dbPath) && fs.existsSync(sourceDb)) {
+    try {
+      fs.copyFileSync(sourceDb, dbPath);
+    } catch (e) {
+      console.warn('Could not copy source db to /tmp, will initialize fresh db:', e.message);
+    }
+  }
+}
 
 const sqliteVerbose = sqlite3.verbose();
 const dbInstance = new sqliteVerbose.Database(dbPath);

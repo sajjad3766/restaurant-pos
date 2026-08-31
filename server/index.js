@@ -8,9 +8,13 @@ import { performCloudSync, getSyncStatusOverview, startSyncBackgroundWorker } fr
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+const uploadsDir = process.env.VERCEL ? path.join('/tmp', 'uploads') : path.join(__dirname, 'uploads');
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create uploads directory:', e.message);
 }
 
 const app = express();
@@ -21,11 +25,32 @@ app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
-// Initialize DB schema & seed data
-await initDatabase();
+// Ensure database initialization
+let isDbReady = false;
+let initDbPromise = null;
+async function ensureDbReady() {
+  if (!isDbReady) {
+    if (!initDbPromise) {
+      initDbPromise = initDatabase().then(() => {
+        isDbReady = true;
+      }).catch(err => {
+        console.error('Database initialization error:', err);
+      });
+    }
+    await initDbPromise;
+  }
+}
 
-// Start background sync worker
-startSyncBackgroundWorker();
+// Middleware to ensure DB schema is ready for all API requests
+app.use(async (req, res, next) => {
+  await ensureDbReady();
+  next();
+});
+
+// Start background sync worker if not in serverless mode
+if (!process.env.VERCEL) {
+  startSyncBackgroundWorker();
+}
 
 // ----------------------------------------------------
 // 0. IMAGE UPLOAD ENDPOINT (BROWSE PC & SAVE OFFLINE)
@@ -704,9 +729,13 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// Start Express Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`=======================================================`);
-  console.log(`   Restaurant POS Backend running at http://localhost:${PORT}`);
-  console.log(`=======================================================`);
-});
+// Start Express Server locally
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`=======================================================`);
+    console.log(`   Restaurant POS Backend running at http://localhost:${PORT}`);
+    console.log(`=======================================================`);
+  });
+}
+
+export default app;
